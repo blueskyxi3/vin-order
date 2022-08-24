@@ -1,0 +1,6 @@
+mongodb:
+  username: root
+  password: root123
+  url: mongodb.smartom
+  port: 27017
+  db: go_db

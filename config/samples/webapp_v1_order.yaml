@@ -1,0 +1,8 @@
+apiVersion: webapp.citictel.com/v1
+kind: Order
+metadata:
+  name: pr20220731001
+spec:
+  type: "pr-pipeline"
+  orderNo: "pr20220731001"
+  createdBy: "vincentzou"

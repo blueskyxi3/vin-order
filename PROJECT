@@ -1,0 +1,16 @@
+domain: citictel.com
+layout:
+- go.kubebuilder.io/v3
+projectName: vin-order
+repo: citictel.com/vincentzou/vin-order
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: citictel.com
+  group: webapp
+  kind: Order
+  path: citictel.com/vincentzou/vin-order/api/v1
+  version: v1
+version: "3"
