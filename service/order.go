@@ -4,6 +4,7 @@ import (
 	"citictel.com/vincentzou/vin-order/mongodb"
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"k8s.io/klog/v2"
 	"log"
 	"time"
@@ -11,12 +12,13 @@ import (
 
 var ignoreKeys = []string{"_id", "createdBy", "createdTime", "updatedTime", "completedTime", "status", "wfType"}
 
-func UpdateOrder(orderNo, status string) error {
+func UpdateOrder(orderNo, status, reason, msg string) error {
 	keyStr := "completedTime"
 	if status == "3" {
 		keyStr = "updatedTime"
 	}
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: "status", Value: status}, {Key: keyStr, Value: time.Now()}}}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: "status", Value: status}, {Key: keyStr, Value: time.Now()},
+		{Key: "reason", Value: reason}, {Key: "msg", Value: msg}}}}
 	filter := bson.D{{Key: "orderNo", Value: orderNo}}
 	return updateOrder(context.TODO(), filter, update)
 }
@@ -65,4 +67,30 @@ func GetOrderInfo(orderNo string) (data map[string]interface{}, err error) {
 		return nil, err
 	}
 	return data, nil
+}
+
+func GetTaskInfo(orderNo, taskName string) (data primitive.M, err error) {
+	client := mongodb.Client
+	collection := client.Database(mongodb.DBName).Collection("order")
+
+	validTaskFilter := bson.E{Key: "tasks", Value: bson.D{
+		{Key: "$elemMatch", Value: bson.D{
+			{Key: "taskName", Value: taskName},
+			{Key: "valid", Value: 1},
+		}},
+	}}
+	filter := bson.D{bson.E{Key: "orderNo", Value: orderNo}}
+	filter = append(filter, validTaskFilter)
+
+	result, err := collection.Distinct(context.TODO(), "tasks", filter)
+	for _, item := range result {
+		m := item.(primitive.D)
+		m2 := m.Map()
+		_taskName := m2["taskName"].(string)
+		_valid := m2["valid"].(int32)
+		if _taskName == _taskName && _valid == 1 {
+			return m.Map(), nil
+		}
+	}
+	return nil, nil
 }

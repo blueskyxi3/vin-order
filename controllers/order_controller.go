@@ -30,9 +30,15 @@ import (
 	"k8s.io/klog"
 	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+	"strings"
 	"time"
 )
 
@@ -45,6 +51,7 @@ type OrderReconciler struct {
 
 //+kubebuilder:rbac:groups=tekton.dev,resources=pipelineruns,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=configmap,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=webapp.citictel.com,resources=orders,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=webapp.citictel.com,resources=orders/status,verbs=get;update;patch
@@ -61,7 +68,12 @@ type OrderReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.1/pkg/reconcile
 func (r *OrderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	log.Info("start to reconcile ----->")
+	log.Info("start to reconcile ----->", req.Name, req.NamespacedName)
+	if strings.HasSuffix(req.Name, "-pod") {
+		go r.TaskHandler(ctx, req)
+		return ctrl.Result{}, nil
+	}
+	klog.Info("-------------------")
 	var order webappv1.Order
 	err := r.Get(ctx, req.NamespacedName, &order)
 	if err != nil {
@@ -191,7 +203,7 @@ func (r *OrderReconciler) pipelineRunHandle(ctx context.Context, order *webappv1
 		case corev1.ConditionFalse:
 			newBackup.Status.Phase = webappv1.OrderPhaseFailed
 			newBackup.Status.CompletionTime = &condition.LastTransitionTime.Inner
-			action := &PatchStatus{client: r.Client, original: order, new: newBackup, status: "2"} // 下一步要执行的动作
+			action := &PatchStatus{client: r.Client, original: order, new: newBackup, status: "2", reason: condition.Reason, msg: condition.Message} // 下一步要执行的动作
 			err = action.Execute(ctx)
 			//TODO need to update task's status into failed 2
 			r.Recorder.Event(order, corev1.EventTypeWarning, condition.Reason, condition.Message)
@@ -284,5 +296,29 @@ func (r *OrderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&webappv1.Order{}).
 		Owns(&tektonv1beta1.PipelineRun{}).
+		Watches(&source.Kind{Type: &corev1.Pod{}},
+			handler.EnqueueRequestsFromMapFunc(r.findObjectsForPods),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{})).
 		Complete(r)
+}
+
+func (r *OrderReconciler) findObjectsForPods(pod client.Object) []reconcile.Request {
+	klog.Infof("find pod-> \n %v-%v \n", pod.GetNamespace(), pod.GetName())
+	labels := pod.GetLabels()
+	klog.Infof("labels:%v\n", labels)
+	_, ok := labels["tekton.dev/pipelineTask"]
+	if !ok {
+		klog.Infof("it can't find the task name, please check if it is in tekton pipeline \n")
+		return nil
+	}
+	requests := make([]reconcile.Request, 1)
+
+	requests[0] = reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      pod.GetName(),
+			Namespace: pod.GetNamespace(),
+		},
+	}
+
+	return requests
 }

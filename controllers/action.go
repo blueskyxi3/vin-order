@@ -26,6 +26,8 @@ type PatchStatus struct {
 	original client.Object
 	new      client.Object
 	status   string
+	reason   string
+	msg      string
 }
 
 func (o *PatchStatus) Execute(ctx context.Context) error {
@@ -36,7 +38,8 @@ func (o *PatchStatus) Execute(ctx context.Context) error {
 	order := o.original.(*webappv1.Order)
 	log.Println("orderNo:", order.Spec.OrderNo)
 	fmt.Println(order)
-	err := service.UpdateOrder(order.Spec.OrderNo, o.status)
+
+	err := service.UpdateOrder(order.Spec.OrderNo, o.status, o.reason, o.msg)
 	if err != nil {
 		klog.Info("update order status into mongodb with error ", err)
 		return err

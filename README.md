@@ -45,15 +45,18 @@ kubectl apply -f config/samples/
 	
 ```sh
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o manager
+make docker-build docker-push IMG=blueskyxi3/vin-order:0.0.9
+make deploy IMG=blueskyxi3/vin-order:0.0.9
+date
 make docker-build docker-push IMG=<some-registry>/vin-order:tag
-make docker-build docker-push IMG=blueskyxi3/vin-order:0.0.6
 ```
 	
 3. Deploy the controller to the cluster with the image specified by `IMG`:
 
 ```sh
 make deploy IMG=<some-registry>/vin-order:tag
-make deploy IMG=blueskyxi3/vin-order:0.0.6
+make deploy IMG=blueskyxi3/vin-order:0.0.8
+
 ```
 
 ### Uninstall CRDs
