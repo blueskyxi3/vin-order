@@ -3,6 +3,7 @@ package service
 import (
 	"citictel.com/vincentzou/vin-order/mongodb"
 	"context"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"k8s.io/klog/v2"
@@ -34,8 +35,48 @@ func updateOrder(ctx context.Context, filter bson.D, update bson.D) error {
 	log.Printf("ur.ModifiedCount: %v\n", ur.ModifiedCount)
 	return nil
 }
+func GetConfigInfo(wfType string) (data map[string]interface{}, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	client := mongodb.Client
+	collection := client.Database(mongodb.DBName).Collection("conf")
 
-func GetOrderInfo(orderNo string) (data map[string]interface{}, err error) {
+	filter := bson.D{{"wfType", wfType}}
+	cur, err := collection.Find(ctx, filter)
+	defer cur.Close(ctx)
+	if err != nil {
+		log.Println("find wfType ", wfType, " with error ", err.Error())
+		return nil, err
+	}
+	var result bson.M
+	for cur.Next(context.TODO()) {
+		if err := cur.Decode(&result); err != nil {
+			panic(err)
+		}
+		fmt.Println(result)
+	}
+	if err = cur.Err(); err != nil {
+		panic(err)
+	}
+	return result, nil
+}
+func GetOrderInfo(orderNo string, configmap primitive.M) (data map[string]interface{}, err error) {
+	var ignoreFields []string
+	ignoreFields = append(ignoreFields, ignoreKeys...)
+	params := configmap["params"]
+	for i, v := range params.(primitive.A) {
+		fmt.Printf("i: %d v: %v \n ", i, v)
+		m := v.(primitive.M)
+		source, ok := m["source"]
+		klog.Infof("source-%v\n", source)
+		if ok {
+			if source == "custom" {
+				ignoreFields = append(ignoreFields, m["name"].(string))
+			}
+		}
+	}
+	klog.Infof("ignoreFileds %v \n", ignoreFields)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	client := mongodb.Client
@@ -56,7 +97,7 @@ func GetOrderInfo(orderNo string) (data map[string]interface{}, err error) {
 		}
 		data = result.Map()
 		//log.Printf("remove sid result: %v\n", res)
-		for _, key := range ignoreKeys {
+		for _, key := range ignoreFields {
 			delete(data, key)
 		}
 		klog.Info(data)

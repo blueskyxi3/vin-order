@@ -19,6 +19,7 @@ package controllers
 import (
 	webappv1 "citictel.com/vincentzou/vin-order/api/v1"
 	"citictel.com/vincentzou/vin-order/service"
+	"citictel.com/vincentzou/vin-order/settings"
 	"context"
 	"fmt"
 	tektonv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
@@ -236,7 +237,12 @@ func (r *OrderReconciler) buildPipelineRun(ctx context.Context, order webappv1.O
 	//}
 
 	var params []tektonv1beta1.Param
-	orderInfo, err := service.GetOrderInfo(order.Spec.OrderNo)
+	configInfo, err := service.GetConfigInfo(order.Spec.Type)
+	if err != nil {
+		klog.Infof("get config %s info error with %s \n", order.Spec.OrderNo, err.Error())
+		return nil, err
+	}
+	orderInfo, err := service.GetOrderInfo(order.Spec.OrderNo, configInfo)
 	if err != nil {
 		klog.Infof("get order %s info error with %s \n", order.Spec.OrderNo, err.Error())
 		return nil, err
@@ -265,6 +271,20 @@ func (r *OrderReconciler) buildPipelineRun(ctx context.Context, order webappv1.O
 			klog.Infof("ignore current key:%s value:%v\n", k, v)
 		}
 	}
+	klog.Info("pipeline timeout is %d,task timeout is %d,finally timeout is %d \n", settings.Conf.PipelineTimeout, settings.Conf.TasksTimeout, settings.Conf.FinallyTimeout)
+	taskTimeout := 10
+	if settings.Conf.TasksTimeout > 0 {
+		taskTimeout = settings.Conf.TasksTimeout
+	}
+	timeoutFields := tektonv1beta1.TimeoutFields{
+		Tasks: &metav1.Duration{Duration: time.Duration(taskTimeout) * time.Minute},
+	}
+	if settings.Conf.PipelineTimeout > 0 {
+		timeoutFields.Pipeline = &metav1.Duration{Duration: time.Duration(settings.Conf.PipelineTimeout) * time.Minute}
+	}
+	if settings.Conf.FinallyTimeout > 0 {
+		timeoutFields.Pipeline = &metav1.Duration{Duration: time.Duration(settings.Conf.FinallyTimeout) * time.Minute}
+	}
 
 	pipelineRun := &tektonv1beta1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{
@@ -280,6 +300,7 @@ func (r *OrderReconciler) buildPipelineRun(ctx context.Context, order webappv1.O
 			ServiceAccountName: "tekton-build-sa",
 			Params:             params,
 			PodTemplate:        &tektonv1beta1.PodTemplate{SchedulerName: "tekton-scheduler"},
+			Timeouts:           &timeoutFields,
 		},
 	}
 	klog.Infof("pipeline Run --> \n %#v \n", pipelineRun)

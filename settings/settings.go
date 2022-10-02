@@ -2,7 +2,6 @@ package settings
 
 import (
 	"fmt"
-
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
@@ -13,6 +12,7 @@ type AppConfig struct {
 	Mode           string `mapstructure:"mode"`
 	Port           int    `mapstructure:"port"`
 	*MongodbConfig `mapstructure:"mongodb"`
+	*TektonConfig  `mapstructure:"tekton"`
 }
 
 type MongodbConfig struct {
@@ -21,6 +21,12 @@ type MongodbConfig struct {
 	Url      string `mapstructure:"url"`
 	Port     string `mapstructure:"port"`
 	Db       string `mapstructure:"db"`
+}
+
+type TektonConfig struct {
+	PipelineTimeout int `mapstructure:"pipelineTimeout"`
+	TasksTimeout    int `mapstructure:"tasksTimeout"`
+	FinallyTimeout  int `mapstructure:"finallyTimeout"`
 }
 
 func Init() error {
