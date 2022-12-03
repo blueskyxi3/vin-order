@@ -1,5 +1,5 @@
 # vin-order
-// TODO(user): Add simple overview of use/purpose
+//it's controller for order custom object
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
